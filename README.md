@@ -23,7 +23,7 @@ Furthermore you need to configure the transmission rate (SEND_FREQ), which defau
 to 4.5 Hz. The MINIMUM_PIXELS constant defines the number of pixels with
 a luminosity > .8 to detect a turned on LED.
 
- Now visit the provided index.html, either locally or directly on [githunb]() and
+ Now visit the provided index.html, either locally or directly on [github](https://rawgithub.com/pscholl/ledTX/master/index.html) and
 hold the LED in the small highlighted rectangular area to transmit your data.
 
  You can furthermore use either a luminosity treshold detector or a chromakey
