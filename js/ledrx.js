@@ -5,7 +5,7 @@ $(window).load(function() {
   var canvas = document.getElementById('canvas');
   var roiel  = document.getElementById('roi');
   var stat   = new profiler();
-  var img;
+  var img, last_img = null;
 
   /* get the video canvas element */
   var width,height,ctx, roi;
@@ -13,7 +13,7 @@ $(window).load(function() {
   var SEND_FREQ = 4.25,      // in Hz
       MINIMUM_PIXELS = 80,  // minimal amount of pixels for a 1
       START_CHAR     = 'h',
-      CHROMA_KEYING  = 1,    // use chroma keying to detect bits
+      CHROMA_KEYING  = 0,    // use chroma keying to detect bits
       LUMINOSITY_TRESHOLD = .7; // only applies when CHROMA_KEYING=0
 
   try {
@@ -52,6 +52,7 @@ $(window).load(function() {
   }
 
   var logln = function(msg) { msg += "<br/>"; log(msg); }
+  var loglns = function(msg) { msg += "<br/>"; logs(msg); }
   var logs = function(msg) { var el = $("#log"); el.html(el.html()+msg); }
   var log = function(msg) { var el = $("#log"); el.html(msg+el.html()); }
 
@@ -164,17 +165,12 @@ $(window).load(function() {
     return parseInt(str,2);
   }
 
-  var keys = [ {color:tinycolor('green'), sensitivity: .2, sample_buffer: new Array(0)} ],
+  var keys = [ {color:tinycolor('green'), sensitivity: .4, sample_buffer: new Array(0)} ],
       last_time = new Date(),
       startseen = 0;
+  var text = "time,up,down\n";
 
   function ledrx() {
-    if (video.currentTime - last_time > (1/SEND_FREQ))
-    {
-      logln("sample frame rate too low to decode transmission, giving up!");
-      return;
-    }
-
     compatibility.requestAnimationFrame(ledrx);
 
     if (video.currentTime == last_time)
@@ -192,44 +188,54 @@ $(window).load(function() {
     ctx.drawImage(video, 0,0,width,height);
     img = ctx.getImageData(roi.x,roi.y,roi.width,roi.height);
 
-    /* chromakey the single leds out of the image, the sampled data
-     * ends up in the sample_buffer var. */
-    //chromakey([ {color:tinycolor('green'), sensitivity: .2},
-    //            {color:tinycolor('red'), sensitivity: .2} ]);
-    chromakey(keys, video.currentTime-last_time);
+    if (last_img != null) {
+      /* draw a debug image */
+      //csvdownload();
 
-    /* draw a debug image */
-    ctx.putImageData(img, roi.x,roi.y);
+      var up=0,down=0;
+      for (var i=0; i<roi.width*roi.height*4; i+=4) {
+        var dis = (img.data[i]+img.data[i+1]+img.data[i+2])/(255*3) -
+                  (last_img.data[i]+last_img.data[i+1]+last_img.data[i+2])/(255*3);
 
-    // for debugging
-    //logln(keys[0].sample_buffer[0].time+ ","+keys[0].sample_buffer[0].num_pixels);
+        //var dis = (img.data[i+1])/(255) - (last_img.data[i+1])/(255);
 
-    /* decode the amplitude shift keying */
-    decode(keys);
+        up += dis > .2;
+        down += dis < -.2;
 
-    /* here we assume that there is only one key! */
-    var key = keys[0];
-    var chr = getchar(key);
+        last_img.data[i] = dis > .2 ? 255 : 0;
+        last_img.data[i+1] = dis < -.2 ? 255 : 0;
+        last_img.data[i+2] = 0;
+      }
 
-    if (chr < 0) {
-      last_time = video.currentTime;
-      $('#stat').html(stat.log());
-      return;
+      text += video.currentTime - last_time;
+      text += ",";
+      text += up;
+      text += ",";
+      text += down;
+      text += "\n";
+
+      var el = $('#csvdownload');
+      el.attr('href','data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+
+      ctx.putImageData(last_img, roi.x,roi.y);
     }
 
-    if (!startseen)
-      startseen = (chr==START_CHAR.charCodeAt(0)); // 'h' is the start symbol
-
-    if (!startseen)
-      key.data.pop(); // remove one bit from the stream and retry
-    else {
-      logs(String.fromCharCode(chr)); // print character and remove one byte from the stream
-      for (var k=0; k<8; k++)
-        key.data.pop();
-    }
+    last_img = img;
 
     last_time = video.currentTime;
     $('#stat').html(stat.log());
+  }
+
+  function csvdownload() {
+    var el = $('#csvdownload');
+    var text = "time,pixels\n";
+    for (var i=0; i<keys[0].sample_buffer.length; i++) {
+      text += keys[0].sample_buffer[i].time;
+      text += ",";
+      text += keys[0].sample_buffer[i].num_pixels;
+      text += "\n";
+    }
+    el.attr('href','data:text/plain;charset=utf-8,' + encodeURIComponent(text));
   }
 });
 
